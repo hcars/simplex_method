@@ -1,3 +1,8 @@
+mod linear_algebra;
+
+use crate::linear_program::linear_algebra::matrix_vec_product;
+use crate::linear_program::linear_algebra::dot_product;
+use crate::linear_program::linear_algebra::min_arg;
 
 pub struct LinearProgram {
     constraints: Vec<f64>, // m x 1
@@ -7,7 +12,10 @@ pub struct LinearProgram {
     vars: Vec<f64>, // n x 1
 }
 
+
 impl LinearProgram {
+    
+
     pub fn new(num_vars: usize, constraints: Vec::<f64>, coeffs: Vec::<Vec<f64>>, obj_weights: Vec::<f64>) -> Self{
         Self {
             slacks: vec![0.0; constraints.len()],
@@ -62,7 +70,7 @@ impl LinearProgram {
         let mut basic_vars: Vec<bool> = (0..(self.vars.len() + self.slacks.len())).map(|x| x >= self.vars.len()).collect();
         let mut all_vars = Vec::from_iter(self.vars.iter().cloned());
         all_vars.append(& mut Vec::from_iter(self.slacks.iter().cloned()));
-        let mut pivot_col = min(& phis);
+        let mut pivot_col = min_arg(& phis);
         let mut pivot_row = self.get_pivot_row(pivot_col, & tableau_mat);
         while ! non_negative(& phis) {
             // set pivot to 1
@@ -86,7 +94,7 @@ impl LinearProgram {
             for col in 0..phis.len() {
                 phis[col] -= tableau_mat[pivot_row][col] * multiplier;
             }
-            pretty_print(& tableau_mat);
+            // pretty_print(& tableau_mat);
             
             basic_vars[pivot_col] = true;
             basic_vars[pivot_row + self.vars.len()] = false;
@@ -103,7 +111,7 @@ impl LinearProgram {
     
             
 
-            pivot_col = min(& phis);
+            pivot_col = min_arg(& phis);
 
             pivot_row = self.get_pivot_row(pivot_col, & tableau_mat);
             
@@ -152,75 +160,5 @@ fn non_negative(vec: &Vec<f64>) -> bool {
     non_negative
 }
 
-fn pretty_print(mat: & Vec<Vec<f64>>) {
-    for curr_vec in mat {
-        let mut curr_row = String::new();
-        for curr_val in curr_vec {
-            curr_row.push_str(& curr_val.to_string());
-            curr_row.push_str(" | ");
-        }
-        curr_row.push_str("\n------");
-
-        println!("{}", curr_row);
-    }
-}
-
-fn id_mat(size: usize) -> Vec<Vec<f64>>{
-    let mut id_mat = vec![vec![0.0; size]; size];
-    for i in 0..size {
-        id_mat[i][i] = 1.0;
-    }
-    id_mat
-}
-
-fn min(vec: & Vec<f64>) -> usize {
-    let mut min = std::f64::MAX;
-    let mut pivot_col = 0;
-    for i in 0..vec.len() {
-        if vec[i] < min {
-            min = vec[i];
-            pivot_col = i;
-        }
-    }
-    return pivot_col;
-}
-
-fn matrix_vec_product(mat: &Vec<Vec<f64>>, vec: &Vec<f64>) -> Vec<f64> {
-    let mut product = vec![0.0; mat.len()];
-    for i in 0..mat.len() {
-        product[i] = dot_product(& mat[i], vec);
-    }
-    product
-}
-
-fn dot_product(vec1: &Vec<f64>, vec2: &Vec<f64>) -> f64 {
-    let mut acc: f64 = 0.0;
-    for i in 0..vec1.len() {
-        acc += vec1[i] * vec2[i];
-    }
-    acc
-}
 
 
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test_dot_product() {
-        let a = vec![1.0, 2.0, 3.0];
-        let b = vec![2.0, 3.0, 4.0];
-        assert_eq!(dot_product(&a, &b), 20.0);
-    }
-
-    #[test]
-    fn test_mat_vec_product() {
-        let A = vec![vec![1.0, 2.0, 3.0], vec![2.0, 3.0, 4.0]];
-        let b = vec![1.0, 0.0, 0.0];
-        assert_eq!(matrix_vec_product(&A, &b), vec![1.0, 2.0]);
-    }
-
-    
-}
