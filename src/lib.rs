@@ -1,8 +1,10 @@
 mod linear_algebra;
 
-use crate::linear_program::linear_algebra::matrix_vec_product;
-use crate::linear_program::linear_algebra::dot_product;
-use crate::linear_program::linear_algebra::min_arg;
+use crate::linear_algebra::matrix_vec_product;
+use crate::linear_algebra::dot_product;
+use crate::linear_algebra::min_arg;
+
+use self::linear_algebra::pretty_print;
 
 pub struct LinearProgram {
     constraints: Vec<f64>, // m x 1
@@ -30,10 +32,8 @@ impl LinearProgram {
         println!("The value of the objective funciton is {}", obj_val);
     }
 
-    pub fn get_var_vals(& self) {
-        for i in 0..self.vars.len() {
-            println!("Variable {}, Value {}", i, self.vars[i]);
-        } 
+    pub fn get_var_vals(& self) -> Vec::<f64> {
+        self.vars.clone()
     }
 
     pub fn is_feasible(& self) -> bool {
@@ -58,21 +58,29 @@ impl LinearProgram {
     }
 
     pub fn run(& mut self){
-        let mut phis: Vec<f64> = self.obj_weights.iter().map(|x| -x).collect();
         self.get_basic_soln();
 
         let mut tableau_mat = Vec::from_iter(self.coeffs.iter().cloned());
         for i in 0..tableau_mat.len() {
-            tableau_mat[i].append(& mut vec![0.0; self.constraints.len()]);
+            let mut slacks = vec![0.0; self.constraints.len()];
+            slacks.append(& mut vec![self.constraints[i]]);
+            tableau_mat[i].append(& mut slacks);
             tableau_mat[i][i + self.vars.len()] = 1.0;
         }
+        let mut phis: Vec<f64> = self.obj_weights.iter().map(|x| -x).collect();
+        phis.append(& mut vec![0.0; self.constraints.len() + 1]);
+        tableau_mat.append(& mut vec![phis]);
+
+
 
         let mut basic_vars: Vec<bool> = (0..(self.vars.len() + self.slacks.len())).map(|x| x >= self.vars.len()).collect();
         let mut all_vars = Vec::from_iter(self.vars.iter().cloned());
         all_vars.append(& mut Vec::from_iter(self.slacks.iter().cloned()));
-        let mut pivot_col = min_arg(& phis);
+        let last_col = self.vars.len() + self.constraints.len();
+        let last_row = tableau_mat.len() - 1;
+        let mut pivot_col = min_arg(& tableau_mat[last_row]);
         let mut pivot_row = self.get_pivot_row(pivot_col, & tableau_mat);
-        while ! non_negative(& phis) {
+        while ! non_negative(& tableau_mat[last_row]) {
             // set pivot to 1
             let pivot_val = tableau_mat[pivot_row][pivot_col];
             tableau_mat[pivot_row] = tableau_mat[pivot_row].iter().map(|x| x / pivot_val).collect();
@@ -84,34 +92,30 @@ impl LinearProgram {
                     for col in 0..tableau_mat[row].len() {
                         tableau_mat[row][col] -= tableau_mat[pivot_row][col] * multiplier;
                     }
-                    self.slacks[row] -= self.slacks[pivot_row] * multiplier;
                 }
             }
-            let mut multiplier = phis[pivot_col] / pivot_val;
-            if phis[pivot_col] < 0.0 && tableau_mat[pivot_row][pivot_col] < 0.0 {
-                multiplier *= -1.0;
-            }
-            for col in 0..phis.len() {
-                phis[col] -= tableau_mat[pivot_row][col] * multiplier;
-            }
-            // pretty_print(& tableau_mat);
+
+            pretty_print(& tableau_mat);
             
             basic_vars[pivot_col] = true;
             basic_vars[pivot_row + self.vars.len()] = false;
-            for i in 0..tableau_mat.len() {
-                for j in 0..all_vars.len() {
-                    if basic_vars[j] && tableau_mat[i][j] != 0.0 {
-                        all_vars[j] = self.slacks[i] / tableau_mat[i][j];
-                    }
-                    if ! basic_vars[j]{
-                        all_vars[j] = 0.0;
-                    }
+            // zero-out non basic vars.
+            all_vars[pivot_row + self.vars.len()] = 0.0;
+            // Find the new value of the basic var.
+            let mut val = tableau_mat[pivot_row][last_col];
+            println!("val {}", val);
+            for i in 0..all_vars.len() {
+                if i != pivot_col {
+                    val -= all_vars[i] * tableau_mat[pivot_row][i];
                 }
             }
+            val /= tableau_mat[pivot_row][pivot_col];
+            all_vars[pivot_col] = val;
+            
     
             
 
-            pivot_col = min_arg(& phis);
+            pivot_col = min_arg(& tableau_mat[tableau_mat.len() - 1]);
 
             pivot_row = self.get_pivot_row(pivot_col, & tableau_mat);
             
@@ -120,7 +124,12 @@ impl LinearProgram {
 
         for i in 0..all_vars.len() {
             if i < self.vars.len() {
-                self.vars[i] = all_vars[i];
+                
+                for j in 0..self.vars.len() {
+                    if tableau_mat[i][j] != 0.0 {
+                        self.vars[j] = tableau_mat[i][last_col];
+                    }
+                }
             }
             else {
                 self.slacks[i - self.vars.len()] = all_vars[i];
@@ -131,12 +140,10 @@ impl LinearProgram {
     fn get_pivot_row(& mut self, pivot_col: usize, curr_mat: & Vec<Vec<f64>>) -> usize {
         let mut curr_min = std::f64::MAX;
         let mut curr_min_ind = 0;
-
         for i in 0..self.constraints.len() {
-            let min_canditate = self.slacks[i]  / curr_mat[i][pivot_col];
+            let min_canditate = curr_mat[i][curr_mat[i].len() - 1]  / curr_mat[i][pivot_col];
             if min_canditate < curr_min {
-                self.slacks[i] = min_canditate;
-                curr_min = self.slacks[i];
+                curr_min = curr_mat[i][curr_mat[i].len() - 1] ;
                 curr_min_ind = i;
             }
         }
